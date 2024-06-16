@@ -53,6 +53,7 @@ def solve_Stokes(f_1, f_2, g, phi_left, phi_right, phi_bottom, phi_top, n_cells_
         for basis_index in basis_indices:
             vertex = vertices[basis_index]
             F1[basis_index] = F2[basis_index] = phi(vertex[0], vertex[1])
+            F3[basis_index] = F1[basis_index] + F2[basis_index]
         return matrices
     
     matrices = [A1, A2, G1, G2, B1, B2]

@@ -2,11 +2,10 @@ import numpy
 import numpy as np
 import scipy.sparse
 import scipy.linalg
+from scipy.sparse.linalg import gmres
 from matplotlib import pyplot as plt
 import os
 from functions_project import *
-
-
 
 x_min = 0.0
 x_max = 1.0
@@ -14,9 +13,6 @@ y_min = 0.0
 y_max = 1.0
 
 n_cells_x = n_cells_y = 40
-
-vertices, cells = generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x, n_cells_y)
-
 
 f_1 = lambda x,y: 0
 f_2 = lambda x,y: 0
@@ -29,7 +25,7 @@ boundary_conditions = {
     'top': (lambda x, y: 4*x*(1-x), lambda x, y: 0)
 }
 
-def solve_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertices, cells, lam, penalty = True):
+def build_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertices, cells, lam, penalty = True):
 
     A1 = compute_global_A_1_A_2(vertices, cells)[1]
     A2 = A1.copy()
@@ -54,6 +50,7 @@ def solve_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertice
             vertex = vertices[basis_index]
             F1[basis_index] = phi_u1(vertex[0], vertex[1])
             F2[basis_index] = phi_u2(vertex[0], vertex[1])
+            F3[basis_index] = F1[basis_index] + F2[basis_index]
         return matrices
     
     matrices = [A1, A2, G1, G2, B1, B2]
@@ -76,7 +73,7 @@ def solve_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertice
     # Top boundary
     i_idx = numpy.arange(0, n_cells_x + 1)
     j_idx = n_cells_y*numpy.ones(n_cells_x + 1, dtype=numpy.int64)
-    matrices = handle_boundary(vertices, i_idx, j_idx, matrices, boundary_conditions["top"])
+    matrices = handle_boundary(vertices, i_idx, j_idx, matrices, boundary_conditions["top"])  
 
     if penalty == True:
 
@@ -84,20 +81,13 @@ def solve_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertice
         S_pen = scipy.sparse.bmat([[A1,None, G1], [None, A2, G2], [B1, B2, penalty]]).tocsr()
         F = numpy.hstack([F1, F2, F3])
 
-        Solution = scipy.sparse.linalg.spsolve(S_pen, F)
-        
-        u_12 = Solution[:2*vertices.shape[0]]
-        BB = scipy.sparse.bmat([[B1, B2]]).tocsr()
-        Divergence = BB.dot(u_12)
-
-        return Solution, S_pen, F, Divergence
+        return S_pen, F
 
     else:
         S = scipy.sparse.bmat([[A1,None, G1], [None, A2, G2], [B1, B2, None]]).tocsr()
         
         F = numpy.hstack([F1, F2, F3])
-        Solution = scipy.sparse.linalg.spsolve(S, F)
-        return Solution, S, F, None
+        return S, F
 
 def plot_results(X, Y, U, V, Divergence, vertices, u1, u2, p, n_cells_x, n_cells_y, penalty):
     if not os.path.exists('figures_P2'):
@@ -153,23 +143,24 @@ def plot_results(X, Y, U, V, Divergence, vertices, u1, u2, p, n_cells_x, n_cells
 
 x_min = y_min = 0.0
 x_max = y_max = 1.0
-n_cells_x = n_cells_y = [32] #[8, 16, 32, 64]
+n_cells_x = n_cells_y = 16 #[8, 16, 32, 64]
 
 penalty = True
 lam = 10000
 
-for i in range(0,len(n_cells_x)):
-    
-    print(f"Running simulation for {n_cells_x[i]}x{n_cells_y[i]} cells")
 
-    vertices, cells = generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x[i], n_cells_y[i])
-    u, S, F, Divergence = solve_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x[i], n_cells_y[i], vertices, cells, lam, penalty)
-    u1 = u[:vertices.shape[0]]; u2 = u[vertices.shape[0]:2*vertices.shape[0]]; p = u[2*vertices.shape[0]:]
-    X = vertices[:, 0].reshape(n_cells_x[i]+1, n_cells_y[i]+1)
-    Y = vertices[:, 1].reshape(n_cells_x[i]+1, n_cells_y[i]+1)
-    U = u1.reshape(n_cells_x[i]+1, n_cells_y[i]+1)
-    V = u2.reshape(n_cells_x[i]+1, n_cells_y[i]+1)
-    plot_results(X, Y, U, V, Divergence, vertices, u1, u2, p, n_cells_x[i], n_cells_y[i], penalty)
+vertices, cells = generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x, n_cells_y)
+S, F = build_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertices, cells, lam, penalty)
+
+
+Divergence = []
+u = scipy.sparse.linalg.spsolve(S,F)# gmres(S, F, atol = 1e-5)[0]
+u1 = u[:vertices.shape[0]]; u2 = u[vertices.shape[0]:2*vertices.shape[0]]; p = u[2*vertices.shape[0]:]
+X = vertices[:, 0].reshape(n_cells_x+1, n_cells_y+1)
+Y = vertices[:, 1].reshape(n_cells_x+1, n_cells_y+1)
+U = u1.reshape(n_cells_x+1, n_cells_y+1)
+V = u2.reshape(n_cells_x+1, n_cells_y+1)
+plot_results(X, Y, U, V, Divergence, vertices, u1, u2, p, n_cells_x, n_cells_y, False)
 
 
 
