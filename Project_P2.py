@@ -3,6 +3,7 @@ import numpy as np
 import scipy.sparse
 import scipy.linalg
 from scipy.sparse.linalg import gmres
+from scipy.sparse.linalg import spsolve
 from matplotlib import pyplot as plt
 import os
 from functions_project import *
@@ -81,7 +82,7 @@ def build_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertice
         S_pen = scipy.sparse.bmat([[A1,None, G1], [None, A2, G2], [B1, B2, penalty]]).tocsr()
         F = numpy.hstack([F1, F2, F3])
 
-        return S_pen, F
+        return S_pen, F, A1, A2, G1, G2, B1, B2, penalty, F1, F2, F3
 
     else:
         S = scipy.sparse.bmat([[A1,None, G1], [None, A2, G2], [B1, B2, None]]).tocsr()
@@ -140,6 +141,11 @@ def plot_results(X, Y, U, V, Divergence, vertices, u1, u2, p, n_cells_x, n_cells
         plt.savefig(f'figures_P2/divergence_{n_cells_x}x{n_cells_y}_{penalty_str}.pdf')
         plt.close()
 
+def build_SIMPLE_precond():
+    #compute the preconditioner
+    return None
+
+
 
 x_min = y_min = 0.0
 x_max = y_max = 1.0
@@ -150,11 +156,61 @@ lam = 10000
 
 
 vertices, cells = generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x, n_cells_y)
-S, F = build_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertices, cells, lam, penalty)
+S, F, A1, A2, G1, G2, B1, B2, penalty, F1, F2, F3 = build_Stokes(f_1, f_2, g, boundary_conditions, n_cells_x, n_cells_y, vertices, cells, lam, penalty)
+
+Schur = penalty - (B1 @ scipy.sparse.linalg.spsolve(A1, G1.T) + B2 @ scipy.sparse.linalg.spsolve(A2, G2.T))
+
+
+K = scipy.sparse.bmat([[A1,None], [None, A2]])
+B = scipy.sparse.bmat([[B1, B2]])
+G = scipy.sparse.bmat([[G1], [G2]])
+
+Prec = scipy.sparse.bmat([[A1,None, None], [None, A2, None], [None, None, penalty]]).tocsr()
+S_prec = spsolve(Prec, S)
+F_prec = spsolve(Prec, F)
+
+
+
+
+
+
+
+
+
+#Approximations
+K_inv_approx = scipy.sparse.diags(1/K.diagonal())
+Schur_inv_approx = penalty - B @ K_inv_approx @ G
+
+
+n = K_inv_approx.shape[0]  
+m = G.shape[1]  # Number of columns in G, assuming G's columns match K_inv_approx's rows
+
+# Create identity matrices of appropriate sizes
+I_n = scipy.sparse.identity(n, format='csr')  # Identity matrix of size n x n
+I_m = scipy.sparse.identity(m, format='csr')  # Identity matrix of size m x m
+
+# Preconditioner
+#M_inv = scipy.sparse.bmat([[I_n, -K_inv_approx @ G], [None, I_m]]) @ scipy.sparse.bmat([[K_inv_approx, None], [- Schur_inv_approx @ B @ K_inv_approx, Schur_inv_approx]])
+
+
+# Assuming 'penalty' is a square numpy array or similar
+diagonal_of_penalty = np.diag(penalty)  # Step 1: Extract the diagonal
+reciprocal_diagonal = 1 / diagonal_of_penalty  # Step 2: Compute the reciprocal
+diagonal_matrix = np.diag(reciprocal_diagonal)  # Step 3: Create a diagonal matrix
+M_inv = scipy.sparse.bmat([[-K_inv_approx, None], [None, diagonal_matrix]]) 
+
+
+num_iter = [0]
+def iteration_callback(residual):
+    num_iter[0] += 1
+
 
 
 Divergence = []
-u = scipy.sparse.linalg.spsolve(S,F)# gmres(S, F, atol = 1e-5)[0]
+#u = gmres(S, F, M = M_inv, atol = 1e-5, callback = iteration_callback)
+u = gmres(S_prec, F_prec, callback = iteration_callback)
+print(num_iter[0])
+u = u[0]
 u1 = u[:vertices.shape[0]]; u2 = u[vertices.shape[0]:2*vertices.shape[0]]; p = u[2*vertices.shape[0]:]
 X = vertices[:, 0].reshape(n_cells_x+1, n_cells_y+1)
 Y = vertices[:, 1].reshape(n_cells_x+1, n_cells_y+1)
