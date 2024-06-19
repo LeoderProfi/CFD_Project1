@@ -1,0 +1,117 @@
+\section{Part 2}
+\subsection{Krylov solver}
+As our Krylov solver we choose to implement the gmres solver. We have our matrix:
+\begin{align}
+    S = \begin{bmatrix}
+        K & G\\
+        B & M
+    \end{bmatrix}\\
+    \text{with} \nonumber\\
+    K = \begin{bmatrix}
+        A_1 & 0 \\
+        0 & A_2
+    \end{bmatrix}, \quad G = \begin{bmatrix}
+        G_1 \\ G_2 \end{bmatrix}, \quad B = \begin{bmatrix}
+        B_1 & B_2 \end{bmatrix}, \quad M = \frac{1}{\lambda} I
+\end{align}
+where the matrices arise from the discretization of our PDE. We can now choose a block preconditioner. We use the block diagonal preconditioner:
+\begin{align}
+    M^{-1} = \begin{bmatrix}
+        K & 0\\
+        0 & M
+    \end{bmatrix}^{-1} = \begin{bmatrix}
+        A_1^{-1} & 0 & 0\\
+        0 & A_2^{-1} & 0\\
+        0 & 0&  \lambda I
+    \end{bmatrix}
+\end{align}
+Applying the block preconditioner to our system directly yields the following system of equations:
+\begin{align}
+    \begin{bmatrix}
+        A_1^{-1} & 0 & 0\\
+        0 & A_2^{-1} & 0\\
+        0 & 0&  \lambda I
+    \end{bmatrix} \begin{bmatrix}
+        A_1 & 0 & G_1\\
+        0 & A_2 & G_2\\
+        B_1 & B_2 & M
+    \end{bmatrix} = \begin{bmatrix}
+        I & 0 & A_1^{-1} G_1\\
+        0 & I & A_2^{-1} G_2\\
+        \lambda B_1 & \lambda B_2 & I
+    \end{bmatrix}
+\end{align}
+This means that we need to apply the inverses of $A_1$ and $A_2$ to the matrices $G_1$ and $G_2$ respectively. We can do this by solving the following systems of equations: $A_1 x_1 = G_1$ and $A_2 x_2 = G_2$. Our preconditioned matrix results to be:
+\begin{align}
+    S_{\text{pre}} = \begin{bmatrix}
+        I & 0 & x_1\\
+        0 & I & x_2\\
+        \lambda B_1 & \lambda B_2 & I
+    \end{bmatrix}
+\end{align}
+We do the same for the r. h. s. of the system:
+\begin{align}
+    \begin{bmatrix}
+        A_1^{-1} & 0 & 0\\
+        0 & A_2^{-1} & 0\\
+        0 & 0&  \lambda I
+    \end{bmatrix} \begin{bmatrix}
+        F_1\\
+        F_2\\
+        F_3 \end{bmatrix} = \begin{bmatrix}
+        A_1^{-1} F_1\\
+        A_2^{-1} F_2\\
+        \lambda F_3
+    \end{bmatrix}
+\end{align}
+We apply the matrices to the vectors, which is equivalent to the solution of the systems of equations $A_1 y_1 = F_1$, $A_2 y_2 = F_2$ resulting in the following r. h. s.:
+\begin{align}
+    F_{\text{pre}} = \begin{bmatrix}
+        y_1\\
+        y_2\\
+        \lambda F_3 \end{bmatrix}
+\end{align}
+
+We solve the system with the gmres algorithm for different cell counts. For comparison we show the number of iterations for the non preconditioned system as well. The results are given in \autoref{tab:gmres}.
+\begin{center}
+    \begin{tabular}{c|c|c|c}\label{tab:gmres}
+        \# cells & \# dofs & It. w. prec. & It. wo. prec. \\
+        \hline
+        8   &  64  &  56 & 356 \\
+        16  &  512 &  46 & 1373 \\
+        32  & 1024 &  26 & 2200 \\
+        64  & 4096 & 12  & 3803 \\
+        \hline
+    \end{tabular}
+\end{center}
+
+\subsection{Discussion applied Inverse}
+Here we will discuss the convergence of the gmres algorithm. We see, that the amount of iterations needed decreases as the problemsize increases in the preconditioned case. In the non-preconditioned case the amount of iterations needed increases with the problem size and is significantly higher than in the preconditioned case. That the iterations needed for convergence decrease with the preconditioner for larger cell counts is a bit peculiar. It leads to the conclusion that this preconditioner has an improved effect on larger systems. We assume that this is due to the preconditioner scaling well wuth the size of $S$ and that its impovement of the spectral properties of the matrix increases with larger matrices. This may be due to the different ratio of inner and outer cells for bigger problems. 
+
+\subsection{Approximated Inverse}
+Now we will approximate the Inverses of $K$ instead of directly applying them. We do this by defining $K^{-1} \approx \hat{K}^{-1}$ with $\hat{K} = \text{diag}(K)$. This results in a preconditioner that can be passed to the gmres algorithm. The Preconditioner will be defined as:
+\begin{align}
+    M^{-1} = \begin{bmatrix}
+        \hat{K} & 0\\
+        0 & M
+    \end{bmatrix}^{-1} = \begin{bmatrix}
+        \frac{1}{\text{diag}(K)} I & 0\\
+        0 & \lambda I
+    \end{bmatrix}
+\end{align}
+We will compare the amount of iterations needed for the direct inverse and the approximated inverse. The results are given in \autoref{tab:approx}.
+
+\begin{center}
+    \begin{tabular}{c|c|c|c|c}\label{tab:approx}
+        \# cells & \# dofs &  It. w. prec. Inverse approx.& It. w. prec. Inverse applied & It. wo. prec. \\
+        \hline
+        8   &  64 & 200 &  56 & 356 \\
+        16  &  512& 330 &  46 & 1373 \\
+        32  & 1024& 414 &  26 & 2200 \\
+        64  & 4096& 415 & 12  & 3803 \\
+        \hline
+    \end{tabular}
+\end{center}
+
+\subsection{Discussion approximated Inverse}
+In \autoref{tab:approx} we see, that when we approximate the inverses and use the resulting matrix as a preconditioner we still have a significantly lower amount of iterations needed for convergence than in the non-preconditioned case. The amount of iterations needed is higher than in the case of the directly applied inverse. This is due to the fact that the approximated inverse is not as good as the directly applied inverse. Furthermore the trend for bigger meshes is that the number of iterations needed increases, contrary to the directly applied inverse. Nonetheless the increase is way less than in the non-preconditioned case and it slows down significantly. For bigger meshes we assume it to converge to a constant value.

@@ -26,8 +26,9 @@ def generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x, n_cells_y):
 
     return vertices, cells
 
-def reference_solution_2D(vertices, n_cells_x, n_cells_y):
+def reference_solution_2D( n_cells_x, n_cells_y, x_min = 0.0, x_max = 1.0, y_min = 0.0, y_max = 1.0):
 
+    vertices, cells = generate_mesh_2D(x_min, x_max, y_min, y_max, n_cells_x, n_cells_y)
     def u_1(x, y):
         return x**2 * ((1-x)**2) * (2*y-6*y**2+4*y**3)
     def u_2(x, y):
@@ -45,7 +46,7 @@ def reference_solution_2D(vertices, n_cells_x, n_cells_y):
 
     u_1_values = calc_u_1(vertices)
     u_2_values = calc_u_2(vertices)
-    p_values = calc_p(vertices)
+    p_ = calc_p(vertices)
 
     # Reshape vertices and values
     x = vertices[:, 0].reshape(n_cells_y+1, n_cells_x+1)
@@ -53,16 +54,26 @@ def reference_solution_2D(vertices, n_cells_x, n_cells_y):
     u1 = u_1_values.reshape(n_cells_y+1, n_cells_x+1)
     u2 = u_2_values.reshape(n_cells_y+1, n_cells_x+1)
 
-    plt.pcolormesh(vertices[:, 0].reshape(n_cells_y+1, n_cells_x+1), vertices[:, 1].reshape(n_cells_y+1, n_cells_x+1), u_1_values.reshape(n_cells_y+1, n_cells_x+1)) 
-    plt.colorbar()
-    plt.show()
-    plt.pcolormesh(vertices[:, 0].reshape(n_cells_y+1, n_cells_x+1), vertices[:, 1].reshape(n_cells_y+1, n_cells_x+1), u_2_values.reshape(n_cells_y+1, n_cells_x+1))
-    plt.colorbar()
-    plt.show()
-    plt.streamplot(x, y, u1, u2)
-    plt.show()
-    plt.savefig('reference_solution.pdf')
-    plt.clf()
+    magnitude = np.sqrt(u1**2 + u2**2)
+    plt.figure(figsize=(8, 6))
+    plt.pcolormesh(vertices[:, 0].reshape(n_cells_y+1, n_cells_x+1), vertices[:, 1].reshape(n_cells_y+1, n_cells_x+1), magnitude, cmap='jet', alpha=0.3)
+    plt.streamplot(x, y, u1, u2, density=1, color=magnitude, linewidth=2, cmap='jet')
+    plt.colorbar(label='Velocity Magnitude')  # Add a colorbar as a legend for magnitude
+    plt.title(f"Streamplot of Velocity Field (u_x, u_y) - Cells: {n_cells_x}x{n_cells_y}")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.savefig(f'figures_P1/reference_sol_{n_cells_x}x{n_cells_y}.pdf')
+    plt.close()
+
+    
+    plt.figure(figsize=(10, 6))
+    plt.pcolormesh(vertices[:, 0].reshape(n_cells_y+1, n_cells_x+1), vertices[:, 1].reshape(n_cells_y+1, n_cells_x+1), p_.reshape(n_cells_y+1, n_cells_x+1))
+    plt.colorbar(label="Pressure (P)")
+    plt.title(f"Pressure Field (P) - Cells: {n_cells_x}x{n_cells_y}")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.savefig(f'figures_P1/reference_pressure_field_{n_cells_x}x{n_cells_y}.pdf')
+    plt.close()
 
 def compute_local_mass_matrix():
     """Int_omega BiBk dx = Int_Omega BjBl dy; Multiply by h"""
