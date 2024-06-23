@@ -120,6 +120,29 @@ def compute_G2_local():
     G_local = numpy.kron(A_local, M_local) #+ numpy.kron(A_local, M_local)
     return G_local
 
+def compute_nonL_1_local():
+    nonL_local = numpy.zeros([4, 4])
+    A_local = compute_local_advection_matrix()
+    M_local = compute_local_mass_matrix()
+    nonL_local1 = numpy.kron(M_local, A_local) #+ numpy.kron(A_local, M_local)
+    nonL_local2 = np.kron(M_local, M_local)
+    return nonL_local1, nonL_local2
+
+def compute_nonL_2_local():
+    nonL_local = numpy.zeros([4, 4])
+    A_local = compute_local_advection_matrix()
+    M_local = compute_local_mass_matrix()
+    nonL_local1 = numpy.kron(A_local, M_local)
+    nonL_local2 = numpy.kron(M_local, M_local)
+    return nonL_local1, nonL_local2
+
+
+def compute_lam_local():
+    lam_local = numpy.zeros([4, 4])
+    M_local = compute_local_mass_matrix()
+    lam_local = numpy.kron(M_local, M_local) #+ numpy.kron(M_local, A_local)
+    return lam_local
+
 def compute_global_A_1_A_2(vertices, cells):
 
     n_cells = cells.shape[0]
@@ -145,6 +168,84 @@ def compute_global_A_1_A_2(vertices, cells):
     A = scipy.sparse.bmat([[N_global, None], [None, N_global]])
 
     return A.tocsr(), N_global 
+
+def compute_global_nonL_in_X(vertices, cells, u1, u2, ux, uy):
+    n_cells = cells.shape[0]
+    n_vertices = vertices.shape[0]
+
+    N_row_idx = numpy.zeros([n_cells, 4, 4])
+    N_col_idx = numpy.zeros([n_cells, 4, 4]) 
+    N_datax1 = numpy.zeros([n_cells, 4, 4])
+    N_datax2 = numpy.zeros([n_cells, 4, 4])
+
+    N_datay1 = numpy.zeros([n_cells, 4, 4])
+    N_datay2 = numpy.zeros([n_cells, 4, 4])
+
+    delta_x = (vertices[cells[:, 1], 0] - vertices[cells[:, 0], 0]).flatten()
+    delta_y = (vertices[cells[:, 2], 1] - vertices[cells[:, 0], 1]).flatten()
+
+    nonL_local_1, nonL_local_2 = compute_nonL_1_local()
+    #print(max(u1), max(u2), max(ux), max(uy), min(u1), min(u2), min(ux), min(uy))
+    for cell_idx, cell in enumerate(cells):
+        col_idx, row_idx = numpy.meshgrid(cell, cell)
+        N_row_idx[cell_idx, :, :] = row_idx
+        N_col_idx[cell_idx, :, :] = col_idx
+        N_datax1[cell_idx, :, :] = nonL_local_1  * u1[cell_idx] * delta_x[cell_idx]
+        
+    for cell_idx, cell in enumerate(cells):
+        col_idx, row_idx = numpy.meshgrid(cell, cell)
+        N_row_idx[cell_idx, :, :] = row_idx
+        N_col_idx[cell_idx, :, :] = col_idx
+        N_datax2[cell_idx, :, :] = nonL_local_2  * ux[cell_idx] * delta_y[cell_idx] * delta_x[cell_idx]
+
+    nonL_local_1, nonL_local_2 = compute_nonL_2_local()
+
+    for cell_idx, cell in enumerate(cells):
+        col_idx, row_idx = numpy.meshgrid(cell, cell)
+        N_row_idx[cell_idx, :, :] = row_idx
+        N_col_idx[cell_idx, :, :] = col_idx
+        N_datay1[cell_idx, :, :] = nonL_local_1  * u2[cell_idx] * delta_y[cell_idx]
+        
+    for cell_idx, cell in enumerate(cells):
+        col_idx, row_idx = numpy.meshgrid(cell, cell)
+        N_row_idx[cell_idx, :, :] = row_idx
+        N_col_idx[cell_idx, :, :] = col_idx
+        N_datay2[cell_idx, :, :] = nonL_local_2  * uy[cell_idx] * delta_y[cell_idx] * delta_x[cell_idx]
+    
+    N_globalx1 = scipy.sparse.csr_array((N_datax1.flatten(), (N_row_idx.flatten(), N_col_idx.flatten())), shape=(n_vertices, n_vertices))
+    N_globalx2 = scipy.sparse.csr_array((N_datax2.flatten(), (N_row_idx.flatten(), N_col_idx.flatten())), shape=(n_vertices, n_vertices))
+
+    N_globaly1 = scipy.sparse.csr_array((N_datay1.flatten(), (N_row_idx.flatten(), N_col_idx.flatten())), shape=(n_vertices, n_vertices))
+    N_globaly2 = scipy.sparse.csr_array((N_datay2.flatten(), (N_row_idx.flatten(), N_col_idx.flatten())), shape=(n_vertices, n_vertices))
+
+    N1 = N_globalx1 + N_globalx2
+    N2 = N_globaly1 + N_globaly2
+
+    return  N1, N2
+
+def compute_global_lam(vertices, cells):
+
+    n_cells = cells.shape[0]
+    n_vertices = vertices.shape[0]
+
+    N_row_idx = numpy.zeros([n_cells, 4, 4])
+    N_col_idx = numpy.zeros([n_cells, 4, 4]) 
+    N_data = numpy.zeros([n_cells, 4, 4])
+
+    delta_x = (vertices[cells[:, 1], 0] - vertices[cells[:, 0], 0]).flatten()
+    delta_y = (vertices[cells[:, 2], 1] - vertices[cells[:, 0], 1]).flatten()
+
+    lam_local = compute_lam_local()
+
+    for cell_idx, cell in enumerate(cells):
+        col_idx, row_idx = numpy.meshgrid(cell, cell)
+        N_row_idx[cell_idx, :, :] = row_idx
+        N_col_idx[cell_idx, :, :] = col_idx
+        N_data[cell_idx, :, :] = lam_local * delta_x[cell_idx] * delta_y[cell_idx]
+    
+    N_global = scipy.sparse.csr_array((N_data.flatten(), (N_row_idx.flatten(), N_col_idx.flatten())), shape=(n_vertices, n_vertices))
+    
+    return N_global 
 
 def compute_global_G(vertices, cells):
 
@@ -217,3 +318,93 @@ def compute_forcing_term_2D(f_1, f_2, g, vertices, cells):
         F3[cell] += 0.25 * f_at_cell_vertices * delta_x[cell_idx] * delta_y[cell_idx]
     
     return F1, F2, F3
+
+def velocity_and_derivative_field(n_cells_x, n_cells_y, cells, vertices, u):
+    n_cells = cells.shape[0]
+    n_vertices = vertices.shape[0]
+    delta_x = (vertices[cells[:, 1], 0] - vertices[cells[:, 0], 0]).flatten()
+    delta_y = (vertices[cells[:, 2], 1] - vertices[cells[:, 0], 1]).flatten()
+    u1 = u[:vertices.shape[0]]
+    u2 = u[vertices.shape[0]:2*vertices.shape[0]]
+
+    u_x = numpy.zeros(n_vertices)
+    u_y = numpy.zeros(n_vertices)
+    for vertex_idx in range(vertices.shape[0]-1):
+        u_x[vertex_idx] = (u1[vertex_idx+1] - u1[vertex_idx-1])/(2*delta_x[0])
+        
+    for vertex_idx in range(vertices.shape[0]-1- n_cells_x):
+        u_y[vertex_idx] = (u2[vertex_idx+n_cells_x+1] - u2[vertex_idx-n_cells_x-1])/(2*delta_y[0])
+
+    return u1, u2, u_x, u_y
+
+def compute_nonlinear_Forcing(u1, u2, du1_dx, du2_dy, vertices, cells):
+    n_cells = cells.shape[0]
+    n_vertices = vertices.shape[0]
+    delta_x = (vertices[cells[:, 1], 0] - vertices[cells[:, 0], 0]).flatten()
+    delta_y = (vertices[cells[:, 2], 1] - vertices[cells[:, 0], 1]).flatten()
+    
+    U1_tminus1 = numpy.zeros(n_vertices)
+    U2_tminus1 = numpy.zeros(n_vertices)
+    U1_dx_tminus1 = numpy.zeros(n_vertices)
+    U2_dy_tminus1 = numpy.zeros(n_vertices)
+    
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u1_at_cell_vertices = u1[i]
+            U1_tminus1[cell] += 0.25 * u1_at_cell_vertices * delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u2_at_cell_vertices = u2[i]
+            U2_tminus1[cell] += 0.25 * u2_at_cell_vertices * delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u1_dx_at_cell_vertices = du1_dx[i]
+            U1_dx_tminus1[cell] += 0.25 * u1_dx_at_cell_vertices * delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u2_dy_at_cell_vertices = du2_dy[i]
+            U2_dy_tminus1[cell] += 0.25 * u2_dy_at_cell_vertices * delta_x[cell_idx] * delta_y[cell_idx]
+    
+    return U1_tminus1, U2_tminus1, U1_dx_tminus1, U2_dy_tminus1
+
+
+def compute_nonlinear_velocity(u1, u2, du1_dx, du2_dy, vertices, cells):
+    n_cells = cells.shape[0]
+    n_vertices = vertices.shape[0]
+    delta_x = (vertices[cells[:, 1], 0] - vertices[cells[:, 0], 0]).flatten()
+    delta_y = (vertices[cells[:, 2], 1] - vertices[cells[:, 0], 1]).flatten()
+    
+    U1_tminus1 = numpy.zeros(n_vertices)
+    U2_tminus1 = numpy.zeros(n_vertices)
+    U1_dx_tminus1 = numpy.zeros(n_vertices)
+    U2_dy_tminus1 = numpy.zeros(n_vertices)
+    
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u1_at_cell_vertices = u1[i]
+            U1_tminus1[cell] += 0.25 * u1_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u2_at_cell_vertices = u2[i]
+            U2_tminus1[cell] += 0.25 * u2_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u1_dx_at_cell_vertices = du1_dx[i]
+            U1_dx_tminus1[cell] += 0.25 * u1_dx_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+
+    for cell_idx, cell in enumerate(cells):
+        for i in cell:
+            u2_dy_at_cell_vertices = du2_dy[i]
+            U2_dy_tminus1[cell] += 0.25 * u2_dy_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+    
+    return U1_tminus1, U2_tminus1, U1_dx_tminus1, U2_dy_tminus1
+
+
+
+if __name__ == "__main__":
+    import Project_P2
