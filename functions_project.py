@@ -385,22 +385,22 @@ def compute_nonlinear_velocity(u1, u2, du1_dx, du2_dy, vertices, cells):
     for cell_idx, cell in enumerate(cells):
         for i in cell:
             u1_at_cell_vertices = u1[i]
-            U1_tminus1[cell] += 0.25 * u1_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+            U1_tminus1[cell] += 0.25 * u1_at_cell_vertices 
 
     for cell_idx, cell in enumerate(cells):
         for i in cell:
             u2_at_cell_vertices = u2[i]
-            U2_tminus1[cell] += 0.25 * u2_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+            U2_tminus1[cell] += 0.25 * u2_at_cell_vertices
 
     for cell_idx, cell in enumerate(cells):
         for i in cell:
             u1_dx_at_cell_vertices = du1_dx[i]
-            U1_dx_tminus1[cell] += 0.25 * u1_dx_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+            U1_dx_tminus1[cell] += 0.25 * u1_dx_at_cell_vertices 
 
     for cell_idx, cell in enumerate(cells):
         for i in cell:
             u2_dy_at_cell_vertices = du2_dy[i]
-            U2_dy_tminus1[cell] += 0.25 * u2_dy_at_cell_vertices #* delta_x[cell_idx] * delta_y[cell_idx]
+            U2_dy_tminus1[cell] += 0.25 * u2_dy_at_cell_vertices 
     
     return U1_tminus1, U2_tminus1, U1_dx_tminus1, U2_dy_tminus1
 

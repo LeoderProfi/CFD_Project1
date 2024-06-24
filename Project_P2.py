@@ -272,22 +272,16 @@ def solve_NStokes(n_cells_x, n_cells_y, penalty, lam, mode, nu):
         S_temp = scipy.sparse.bmat([[A1_temp, None, G1], [None, A2_temp, G2], [B1, B2, penalty_M]]).tocsr()
         F_temp = numpy.hstack([F1_temp, F2_temp, F3])
 
-        # Extract the diagonal from S_temp
         diagonal = S_temp.diagonal()
 
-        # Compute the reciprocals of the diagonal elements, avoiding division by zero
         reciprocal_diagonal = 1 / diagonal
-        reciprocal_diagonal[diagonal == 0] = 0  # Prevent division by zero errors
-
-        # Create a sparse diagonal matrix with the reciprocals on the diagonal
+        reciprocal_diagonal[diagonal == 0] = 0 
         reciprocal_matrix = scipy.sparse.diags(reciprocal_diagonal)
         num_iter = [0]
         def iteration_callback(residual): 
             num_iter[0] += 1
 
-        u = gmres(S_temp, F_temp, M = reciprocal_matrix, atol = 1e-5, callback = iteration_callback)[0]
-
-        print(f"Number of inner iterations: {num_iter}")
+        u = gmres(S_temp, F_temp, M = reciprocal_matrix, atol = 1e-5, callback = iteration_callback)[0]; print(f"Number of inner iterations: {num_iter}")
 
         #u = spsolve(S_temp, F_temp)
         Residual = np.linalg.norm(u - U_old)
@@ -311,8 +305,8 @@ def Q2():
         plot_results(X, Y, U, V, None, vertices, u1, u2, p, n_cells_x[i], n_cells_y[i], True)
 
 
-n_cells_x = n_cells_y = [50] #[8, 16, 32, 64]
-nu = 0.001
+n_cells_x = n_cells_y = [8, 16, 32, 64]
+nu = 0.01
 penalty = True
 lam = 10
 mode = 'no_prec' #'Inv_approx'
